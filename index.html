@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0f1115">
+<title>Confraternização de Equipe</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23f5a623'/><text x='50' y='70' font-size='58' text-anchor='middle'>🍻</text></svg>">
+<style>
+  :root{--bg:#0f1115;--card:#181b22;--line:#262b36;--txt:#e8e8e8;--mut:#8a93a6;--acc:#f5a623;--ok:#3fb950;--bad:#ff6b6b}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:15px;padding-bottom:40px}
+  header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line);padding:12px 14px}
+  h1{font-size:18px;margin:0 0 8px;color:var(--acc)}
+  .linha-top{display:flex;gap:8px;align-items:center}
+  select,input{background:var(--card);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:9px 10px;font-size:15px;width:100%}
+  button{font:inherit;cursor:pointer;border:0;border-radius:8px;padding:9px 12px;background:var(--acc);color:#111;font-weight:600}
+  button.sec{background:var(--card);color:var(--txt);border:1px solid var(--line);font-weight:500}
+  button.perigo{background:transparent;color:var(--bad);border:1px solid var(--line);padding:6px 10px}
+  nav{display:flex;gap:6px;margin-top:10px;overflow-x:auto}
+  nav button{flex:1;white-space:nowrap;background:var(--card);color:var(--mut);font-weight:500;border:1px solid var(--line)}
+  nav button.on{background:var(--acc);color:#111;border-color:var(--acc)}
+  main{padding:14px;max-width:720px;margin:0 auto}
+  section{display:none}
+  section.on{display:block}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px}
+  .card h2{font-size:15px;margin:0 0 10px;color:var(--acc)}
+  .grade{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:6px;align-items:center}
+  .cab{font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
+  .nome{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+  .cel{background:var(--bg);color:var(--txt);border:1px solid var(--line);font-weight:500;text-align:left;padding:7px 8px;line-height:1.25}
+  .cel small{display:block;color:var(--mut);font-size:12px;font-weight:400}
+  .cel.pago{border-color:var(--ok);background:#0f2416}
+  .cel.pago small{color:var(--ok)}
+  .rm{background:transparent;color:var(--mut);border:0;padding:6px 8px;font-size:16px}
+  .form{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+  .form .full{grid-column:1/-1}
+  .item{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--line)}
+  .item:last-child{border-bottom:0}
+  .item small{color:var(--mut);display:block}
+  .val{font-weight:600;white-space:nowrap}
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .st{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px}
+  .st span{display:block;color:var(--mut);font-size:12px}
+  .st b{font-size:16px}
+  .pos{color:var(--ok)} .neg{color:var(--bad)}
+  .acoes{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .acoes button{flex:1}
+  .vazio{color:var(--mut);text-align:center;padding:14px 0}
+  .rotulo{font-size:12px;color:var(--mut);margin:10px 0 4px;display:block}
+  #toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--acc);color:#111;padding:10px 16px;border-radius:10px;font-weight:600;opacity:0;transition:opacity .25s;pointer-events:none}
+  #toast.on{opacity:1}
+  @media print{
+    header nav,.acoes,.rm,.naoimprime,#toast{display:none!important}
+    body{background:#fff;color:#000}
+    .card{border:1px solid #999;background:#fff}
+    .card h2{color:#000}
+    section{display:block!important}
+    .cel{background:#fff;color:#000}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1 id="titulo">Confraternização de Equipe</h1>
+  <div class="linha-top">
+    <select id="ano" aria-label="Ano"></select>
+    <button class="sec" data-act="novoAno" style="width:auto">+ ano</button>
+  </div>
+  <nav>
+    <button data-aba="pag">Pagamentos</button>
+    <button data-aba="desp">Despesas</button>
+    <button data-aba="res">Resumo</button>
+    <button data-aba="cfg">Config</button>
+  </nav>
+</header>
+
+<main>
+  <!-- PAGAMENTOS -->
+  <section id="s-pag">
+    <div class="card">
+      <h2>Contribuições do ano</h2>
+      <div class="grade cab">
+        <div>Integrante</div><div>Férias</div><div>Aniversário</div><div></div>
+      </div>
+      <div id="lista-membros" class="grade" style="margin-top:6px"></div>
+      <div class="form">
+        <input id="novoMembro" class="full" placeholder="Nome do integrante" maxlength="60">
+        <button class="full" data-act="addMembro">Adicionar integrante</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- DESPESAS -->
+  <section id="s-desp">
+    <div class="card">
+      <h2>Nova despesa</h2>
+      <div class="form">
+        <input id="dDesc" class="full" placeholder="Descrição (ex.: churrasco, presente)" maxlength="80">
+        <input id="dValor" inputmode="decimal" placeholder="Valor (R$)">
+        <input id="dData" type="date">
+        <select id="dCota" class="full">
+          <option value="ferias">Vinculada a Férias</option>
+          <option value="aniv">Vinculada a Aniversário</option>
+          <option value="geral">Geral (não vinculada)</option>
+        </select>
+        <button class="full" data-act="addDesp">Registrar despesa</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Despesas lançadas</h2>
+      <div id="lista-desp"></div>
+    </div>
+  </section>
+
+  <!-- RESUMO -->
+  <section id="s-res">
+    <div id="resumo"></div>
+    <div class="acoes naoimprime">
+      <button data-act="copiar">Copiar relatório (WhatsApp)</button>
+      <button class="sec" data-act="imprimir">Imprimir / PDF</button>
+    </div>
+  </section>
+
+  <!-- CONFIG -->
+  <section id="s-cfg">
+    <div class="card">
+      <h2>Dados da equipe</h2>
+      <span class="rotulo">Nome da equipe</span>
+      <input data-cfg="equipe" maxlength="60">
+      <span class="rotulo">Chave Pix (aparece no relatório)</span>
+      <input data-cfg="pix" maxlength="100">
+    </div>
+    <div class="card">
+      <h2>Valores do ano selecionado</h2>
+      <span class="rotulo">Valor por pessoa — Férias (R$)</span>
+      <input data-cfg="ferias" inputmode="decimal">
+      <span class="rotulo">Valor por pessoa — Aniversário (R$)</span>
+      <input data-cfg="aniv" inputmode="decimal">
+      <p class="vazio" style="padding:8px 0 0;text-align:left">Alterar o valor não recalcula pagamentos já marcados.</p>
+    </div>
+    <div class="card">
+      <h2>Backup</h2>
+      <div class="acoes" style="margin-top:0">
+        <button class="sec" data-act="exportar">Exportar backup</button>
+        <button class="sec" onclick="document.getElementById('importar').click()">Importar backup</button>
+      </div>
+      <input type="file" id="importar" accept="application/json" hidden>
+      <p class="vazio" style="padding:8px 0 0;text-align:left">Os dados ficam salvos só neste aparelho e navegador. Exporte um backup de vez em quando.</p>
+    </div>
+  </section>
+</main>
+
+<div id="toast"></div>
+
+<script>
+const KEY = 'confra-equipe-v1';
+const COTAS = [{id:'ferias', nome:'Férias'}, {id:'aniv', nome:'Aniversário'}];
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const brl = v => Number(v || 0).toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+const pad = n => String(n).padStart(2, '0');
+const hoje = () => { const d = new Date(); return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()); };
+const fmtData = iso => iso ? iso.split('-').reverse().join('/') : '';
+const nomeCota = id => (COTAS.find(c => c.id === id) || {nome:'Geral'}).nome;
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const numero = s => parseFloat(String(s).replace(/\./g, '').replace(',', '.')) || 0;
+
+function load(){ try { return JSON.parse(localStorage.getItem(KEY)); } catch(e) { return null; } }
+function save(){ localStorage.setItem(KEY, JSON.stringify(db)); }
+
+let db = load() || { equipe:'Minha Equipe', pix:'', membros:[], anos:{}, ano:String(new Date().getFullYear()), aba:'pag' };
+
+function ensureAno(a){
+  if (!db.anos[a]) {
+    const prev = Object.keys(db.anos).sort().pop();
+    db.anos[a] = { valores: prev ? {...db.anos[prev].valores} : {ferias:50, aniv:50}, pagos:{}, despesas:[] };
+  }
+}
+ensureAno(db.ano);
+const A = () => db.anos[db.ano];
+
+function toast(msg){
+  const t = $('#toast'); t.textContent = msg; t.classList.add('on');
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('on'), 1800);
+}
+
+/* ---------- cálculos ---------- */
+function calc(){
+  const a = A(); const r = {};
+  COTAS.forEach(c => {
+    const pagos = db.membros.filter(m => a.pagos[m.id + '|' + c.id]).length;
+    const valor = a.valores[c.id] || 0;
+    const arrecadado = pagos * valor;
+    const despesas = a.despesas.filter(d => d.cota === c.id).reduce((s, d) => s + d.valor, 0);
+    r[c.id] = { esperado: db.membros.length * valor, arrecadado, despesas, saldo: arrecadado - despesas, pendentes: db.membros.length - pagos };
+  });
+  const arrTot = COTAS.reduce((s, c) => s + r[c.id].arrecadado, 0);
+  const despTot = a.despesas.reduce((s, d) => s + d.valor, 0);
+  r.total = { arrecadado: arrTot, despesas: despTot, saldo: arrTot - despTot };
+  return r;
+}
+
+/* ---------- ano ---------- */
+function novoAno(){
+  const ano = prompt('Qual ano? (ex.: ' + (Number(db.ano) + 1) + ')', String(Number(db.ano) + 1));
+  if (!ano || !/^\d{4}$/.test(ano.trim())) return;
+  db.ano = ano.trim(); ensureAno(db.ano); save(); render();
+}
+
+/* ---------- membros ---------- */
+function addMembro(){
+  const inp = $('#novoMembro'); const nome = inp.value.trim();
+  if (!nome) return toast('Digite o nome');
+  if (db.membros.some(m => m.nome.toLowerCase() === nome.toLowerCase())) return toast('Já existe');
+  db.membros.push({ id: uid(), nome }); save(); render(); $('#novoMembro').focus();
+}
+function rmMembro(id){
+  const m = db.membros.find(x => x.id === id); if (!m) return;
+  if (!confirm('Remover ' + m.nome + ' da lista?')) return;
+  db.membros = db.membros.filter(x => x.id !== id);
+  Object.keys(A().pagos).forEach(k => { if (k.startsWith(id + '|')) delete A().pagos[k]; });
+  save(); render();
+}
+function pagar(mid, cota){
+  const a = A(); const k = mid + '|' + cota;
+  if (a.pagos[k]) {
+    if (!confirm('Desmarcar este pagamento?')) return;
+    delete a.pagos[k];
+  } else {
+    a.pagos[k] = hoje();
+  }
+  save(); render();
+}
+
+/* ---------- despesas ---------- */
+function addDesp(){
+  const desc = $('#dDesc').value.trim();
+  const valor = numero($('#dValor').value);
+  const data = $('#dData').value || hoje();
+  const cota = $('#dCota').value;
+  if (!desc) return toast('Digite a descrição');
+  if (valor <= 0) return toast('Digite um valor');
+  A().despesas.push({ id: uid(), desc, valor, data, cota });
+  save(); render(); toast('Despesa registrada');
+}
+function rmDesp(id){
+  if (!confirm('Excluir esta despesa?')) return;
+  A().despesas = A().despesas.filter(d => d.id !== id); save(); render();
+}
+
+/* ---------- config ---------- */
+function cfg(el){
+  const k = el.dataset.cfg;
+  if (k === 'equipe') { db.equipe = el.value.trim() || 'Minha Equipe'; $('#titulo').textContent = db.equipe; }
+  else if (k === 'pix') db.pix = el.value.trim();
+  else A().valores[k] = numero(el.value);
+  save(); toast('Salvo');
+}
+
+function exportar(){
+  const blob = new Blob([JSON.stringify(db, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'confra-equipe-backup-' + hoje() + '.json';
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+function importar(file){
+  if (!file) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const obj = JSON.parse(r.result);
+      if (!Array.isArray(obj.membros) || typeof obj.anos !== 'object') throw new Error();
+      if (!confirm('Substituir os dados atuais pelo backup?')) return;
+      db = obj; if (!db.anos[db.ano]) db.ano = Object.keys(db.anos).sort().pop() || String(new Date().getFullYear());
+      ensureAno(db.ano); save(); render(); toast('Backup importado');
+    } catch(e) { alert('Arquivo de backup inválido.'); }
+  };
+  r.readAsText(file);
+}
+
+/* ---------- relatório ---------- */
+function relatorio(){
+  const a = A(); const c = calc(); const L = [];
+  L.push('*' + db.equipe + ' — ' + db.ano + '*');
+  L.push('Férias: ' + brl(a.valores.ferias) + ' por pessoa');
+  L.push('Aniversário: ' + brl(a.valores.aniv) + ' por pessoa');
+  if (db.pix) L.push('Pix: ' + db.pix);
+  L.push('');
+  COTAS.forEach(cota => {
+    const pend = db.membros.filter(m => !a.pagos[m.id + '|' + cota.id]);
+    L.push('*Pendentes — ' + cota.nome + ' (' + pend.length + ')*');
+    if (!pend.length) L.push('Ninguém pendente 🎉');
+    pend.forEach(m => L.push('- ' + m.nome));
+    L.push('');
+  });
+  L.push('*Arrecadado:* ' + brl(c.total.arrecadado));
+  L.push('*Despesas:* ' + brl(c.total.despesas));
+  L.push('*Saldo do fundo:* ' + brl(c.total.saldo));
+  return L.join('\n');
+}
+async function copiar(){
+  const t = relatorio();
+  try { await navigator.clipboard.writeText(t); }
+  catch(e) { const ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
+  toast('Relatório copiado');
+}
+
+/* ---------- render ---------- */
+function renderAnos(){
+  $('#ano').innerHTML = Object.keys(db.anos).sort().map(y => `<option value="${y}" ${y === db.ano ? 'selected' : ''}>${y}</option>`).join('');
+}
+
+function renderPag(){
+  const a = A();
+  const box = $('#lista-membros');
+  if (!db.membros.length) { box.outerHTML = '<div id="lista-membros" class="vazio">Adicione os integrantes da equipe abaixo.</div>'; return; }
+  box.className = 'grade';
+  box.innerHTML = db.membros.map(m => `
+    <div class="nome" title="${esc(m.nome)}">${esc(m.nome)}</div>
+    ${COTAS.map(c => {
+      const d = a.pagos[m.id + '|' + c.id];
+      return `<button class="cel ${d ? 'pago' : ''}" data-act="pagar" data-m="${m.id}" data-c="${c.id}">
+        ${d ? '✓ Pago' : 'Pendente'}<small>${d ? fmtData(d) : brl(a.valores[c.id])}</small></button>`;
+    }).join('')}
+    <button class="rm" data-act="rmMembro" data-m="${m.id}" aria-label="Remover">✕</button>
+  `).join('');
+}
+
+function renderDesp(){
+  const a = A();
+  if (!$('#dData').value) $('#dData').value = hoje();
+  const lista = [...a.despesas].sort((x, y) => (y.data || '').localeCompare(x.data || ''));
+  $('#lista-desp').innerHTML = lista.length ? lista.map(d => `
+    <div class="item">
+      <div><b>${esc(d.desc)}</b><small>${fmtData(d.data)} · ${nomeCota(d.cota)}</small></div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="val">${brl(d.valor)}</span>
+        <button class="perigo" data-act="rmDesp" data-id="${d.id}">✕</button>
+      </div>
+    </div>`).join('') : '<div class="vazio">Nenhuma despesa neste ano.</div>';
+}
+
+function renderRes(){
+  const a = A(); const c = calc();
+  const cards = COTAS.map(cota => {
+    const s = c[cota.id];
+    return `<div class="card"><h2>${cota.nome}</h2>
+      <div class="stats">
+        <div class="st"><span>Esperado</span><b>${brl(s.esperado)}</b></div>
+        <div class="st"><span>Arrecadado</span><b class="pos">${brl(s.arrecadado)}</b></div>
+        <div class="st"><span>Despesas</span><b class="neg">${brl(s.despesas)}</b></div>
+        <div class="st"><span>Saldo</span><b class="${s.saldo < 0 ? 'neg' : 'pos'}">${brl(s.saldo)}</b></div>
+      </div>
+      <p style="color:var(--mut);margin:10px 0 0">${s.pendentes} pendente(s) de ${db.membros.length}</p>
+    </div>`;
+  }).join('');
+  const geral = a.despesas.filter(d => d.cota === 'geral').reduce((s, d) => s + d.valor, 0);
+  $('#resumo').innerHTML = cards + `<div class="card"><h2>Total do fundo</h2>
+    <div class="stats">
+      <div class="st"><span>Arrecadado</span><b class="pos">${brl(c.total.arrecadado)}</b></div>
+      <div class="st"><span>Despesas (tudo)</span><b class="neg">${brl(c.total.despesas)}</b></div>
+    </div>
+    <div class="st" style="margin-top:8px"><span>Saldo atual</span><b class="${c.total.saldo < 0 ? 'neg' : 'pos'}" style="font-size:20px">${brl(c.total.saldo)}</b></div>
+    ${geral ? `<p style="color:var(--mut);margin:8px 0 0">Inclui ${brl(geral)} em despesas gerais.</p>` : ''}
+  </div>`;
+}
+
+function renderCfg(){
+  const a = A();
+  document.querySelector('[data-cfg=equipe]').value = db.equipe || '';
+  document.querySelector('[data-cfg=pix]').value = db.pix || '';
+  document.querySelector('[data-cfg=ferias]').value = a.valores.ferias ?? '';
+  document.querySelector('[data-cfg=aniv]').value = a.valores.aniv ?? '';
+}
+
+function render(){
+  $('#titulo').textContent = db.equipe || 'Confraternização de Equipe';
+  renderAnos();
+  document.querySelectorAll('[data-aba]').forEach(b => b.classList.toggle('on', b.dataset.aba === db.aba));
+  ['pag','desp','res','cfg'].forEach(s => $('#s-' + s).classList.toggle('on', db.aba === s));
+  if (db.aba === 'pag') renderPag();
+  if (db.aba === 'desp') renderDesp();
+  if (db.aba === 'res') renderRes();
+  if (db.aba === 'cfg') renderCfg();
+}
+
+/* ---------- eventos ---------- */
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-act],[data-aba]');
+  if (!t) return;
+  if (t.dataset.aba) { db.aba = t.dataset.aba; save(); render(); return; }
+  switch (t.dataset.act) {
+    case 'novoAno': novoAno(); break;
+    case 'addMembro': addMembro(); break;
+    case 'rmMembro': rmMembro(t.dataset.m); break;
+    case 'pagar': pagar(t.dataset.m, t.dataset.c); break;
+    case 'addDesp': addDesp(); break;
+    case 'rmDesp': rmDesp(t.dataset.id); break;
+    case 'copiar': copiar(); break;
+    case 'imprimir': window.print(); break;
+    case 'exportar': exportar(); break;
+  }
+});
+document.addEventListener('change', e => {
+  const el = e.target;
+  if (el.id === 'ano') { db.ano = el.value; ensureAno(db.ano); save(); render(); }
+  else if (el.id === 'importar') { importar(el.files[0]); el.value = ''; }
+  else if (el.dataset && el.dataset.cfg) cfg(el);
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.id === 'novoMembro') addMembro();
+});
+
+render();
+</script>
+</body>
+</html>
