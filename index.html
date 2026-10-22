@@ -61,6 +61,11 @@
   .dia.sel{background:var(--acc);color:#111;border-color:var(--acc)}
   .dia.sel i{color:#111}
   .legenda{color:var(--mut);font-size:12px;margin:10px 0 0}
+  .mes-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .mes-btn{background:var(--bg);color:var(--txt);border:1px solid var(--line);text-align:left;padding:8px 9px;position:relative}
+  .mes-btn.on{border-color:var(--acc);outline:1px solid var(--acc)}
+  .mes-btn small{display:block;color:var(--mut);font-size:11px;font-weight:400}
+  .mes-btn .ok{position:absolute;top:6px;right:8px;color:var(--ok)}
   #toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--acc);color:#111;padding:10px 16px;border-radius:10px;font-weight:600;opacity:0;transition:opacity .25s;pointer-events:none}
   #toast.on{opacity:1}
   @media print{
@@ -84,6 +89,7 @@
   <nav>
     <button data-aba="mem">Membros</button>
     <button data-aba="cal">Calendário</button>
+    <button data-aba="mes">Mensal</button>
     <button data-aba="pag">Pagamentos</button>
     <button data-aba="desp">Despesas</button>
     <button data-aba="res">Resumo</button>
@@ -99,8 +105,10 @@
       <div class="form">
         <input id="mNome" class="full" placeholder="Nome do integrante" maxlength="60">
         <div class="full"><span class="rotulo">Data de aniversário</span><input id="mAniv" type="date"></div>
-        <div><span class="rotulo">Férias — início</span><input id="mFIni" type="date"></div>
-        <div><span class="rotulo">Férias — fim</span><input id="mFFim" type="date"></div>
+        <div><span class="rotulo">Férias — data de saída</span><input id="mFIni" type="date"></div>
+        <div><span class="rotulo">Quantos dias</span><input id="mDias" type="number" min="1" max="365" inputmode="numeric" placeholder="ex.: 30"></div>
+        <div class="full"><span class="rotulo">Retorno ao trabalho (calculado)</span><input id="mRetorno" disabled placeholder="—"></div>
+        <input id="mFFim" type="hidden">
         <button class="full" data-act="salvarMem" id="btnSalvarMem">Adicionar integrante</button>
         <button class="sec full" data-act="cancelarMem" id="btnCancelarMem" style="display:none">Cancelar edição</button>
       </div>
@@ -113,6 +121,11 @@
       <h2>Próximos 60 dias</h2>
       <div id="lista-prox"></div>
     </div>
+  </section>
+
+  <!-- MENSAL -->
+  <section id="s-mes">
+    <div id="mes"></div>
   </section>
 
   <!-- CALENDÁRIO -->
@@ -177,6 +190,8 @@
       <input data-cfg="ferias" inputmode="decimal">
       <span class="rotulo">Valor por pessoa — Aniversário (R$)</span>
       <input data-cfg="aniv" inputmode="decimal">
+      <span class="rotulo">Valor pago por cada homenageado na confra mensal (R$)</span>
+      <input data-cfg="homen" inputmode="decimal">
       <p class="vazio" style="padding:8px 0 0;text-align:left">Alterar o valor não recalcula pagamentos já marcados.</p>
     </div>
     <div class="card">
@@ -217,10 +232,11 @@ let editId = null;
 function ensureAno(a){
   if (!db.anos[a]) {
     const prev = Object.keys(db.anos).sort().pop();
-    db.anos[a] = { valores: prev ? {...db.anos[prev].valores} : {ferias:50, aniv:50}, pagos:{}, despesas:[] };
+    db.anos[a] = { valores: prev ? {...db.anos[prev].valores} : {ferias:50, aniv:50}, pagos:{}, despesas:[], mensal:{} };
   }
 }
 ensureAno(db.ano);
+Object.keys(db.anos).forEach(y => { db.anos[y].mensal = db.anos[y].mensal || {}; });
 const A = () => db.anos[db.ano];
 
 function toast(msg){
@@ -272,10 +288,35 @@ function novoAno(){
   db.ano = ano.trim(); ensureAno(db.ano); save(); render();
 }
 
+/* ---------- férias: saída + dias → retorno ---------- */
+function addDias(iso, n){
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(y, m - 1, d + n);
+  return dt.getFullYear() + '-' + pad(dt.getMonth() + 1) + '-' + pad(dt.getDate());
+}
+function diasEntre(a, b){
+  const [y1, m1, d1] = a.split('-').map(Number), [y2, m2, d2] = b.split('-').map(Number);
+  return Math.round((new Date(y2, m2 - 1, d2) - new Date(y1, m1 - 1, d1)) / 864e5) + 1;
+}
+/* último dia de férias = saída + dias - 1; retorno ao trabalho = saída + dias */
+function atualizaRetorno(){
+  const ini = $('#mFIni').value, dias = parseInt($('#mDias').value, 10);
+  if (ini && dias > 0) {
+    $('#mFFim').value = addDias(ini, dias - 1);
+    $('#mRetorno').value = fmtData(addDias(ini, dias));
+  } else {
+    $('#mFFim').value = '';
+    $('#mRetorno').value = '';
+  }
+}
+function limparCamposMem(){
+  ['#mNome','#mAniv','#mFIni','#mDias','#mFFim','#mRetorno'].forEach(s => $(s).value = '');
+}
+
 /* ---------- membros (cadastro) ---------- */
 function limparForm(){
   editId = null;
-  ['#mNome','#mAniv','#mFIni','#mFFim'].forEach(s => $(s).value = '');
+  limparCamposMem();
   render();
 }
 function editarMem(id){
@@ -284,7 +325,8 @@ function editarMem(id){
   $('#mNome').value = m.nome || '';
   $('#mAniv').value = m.aniv || '';
   $('#mFIni').value = m.feriasIni || '';
-  $('#mFFim').value = m.feriasFim || '';
+  $('#mDias').value = m.feriasIni && m.feriasFim ? diasEntre(m.feriasIni, m.feriasFim) : '';
+  atualizaRetorno();
   render();
   $('#mNome').focus();
   window.scrollTo({top:0, behavior:'smooth'});
@@ -295,7 +337,7 @@ function salvarMem(){
   const feriasIni = $('#mFIni').value;
   const feriasFim = $('#mFFim').value;
   if (!nome) return toast('Digite o nome');
-  if (feriasIni && feriasFim && feriasFim < feriasIni) return toast('Fim das férias é antes do início');
+  if (feriasIni && !feriasFim) return toast('Informe quantos dias de férias');
   if (db.membros.some(m => m.id !== editId && m.nome.toLowerCase() === nome.toLowerCase())) return toast('Já existe alguém com esse nome');
   const dados = { nome, aniv, feriasIni, feriasFim };
   if (editId) {
@@ -305,7 +347,7 @@ function salvarMem(){
     db.membros.push({ id: uid(), ...dados }); toast('Integrante adicionado');
   }
   editId = null;
-  ['#mNome','#mAniv','#mFIni','#mFFim'].forEach(s => $(s).value = '');
+  limparCamposMem();
   save(); render();
 }
 function rmMembro(id){
@@ -486,6 +528,123 @@ function calMes(delta){
 function calDia(d){ calSel = calSel === d ? null : d; render(); }
 function calHoje(){ const h = new Date(); calY = h.getFullYear(); calM = h.getMonth(); calSel = h.getDate(); render(); }
 
+/* ---------- confraternização mensal ---------- */
+let mesSel = new Date().getMonth();
+
+/* aniversariantes e pessoas em férias em algum dia do mês */
+function pessoasDoMes(y, m){
+  const an = new Map(), fe = new Map();
+  for (let d = 1; d <= new Date(y, m + 1, 0).getDate(); d++) {
+    const ev = eventosDoDia(y, m, d);
+    ev.aniv.forEach(x => an.set(x.id, x));
+    ev.ferias.forEach(x => fe.set(x.id, x));
+  }
+  const ordena = mapa => [...mapa.values()].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  return { aniv: ordena(an), ferias: ordena(fe) };
+}
+/* regra: cada homenageado paga um valor fixo (A().valores.homen);
+   o restante do custo é dividido entre os demais integrantes */
+function infoMes(m){
+  const y = Number(db.ano);
+  const p = pessoasDoMes(y, m);
+  const homen = [...new Map([...p.aniv, ...p.ferias].map(x => [x.id, x])).values()];
+  const ids = new Set(homen.map(x => x.id));
+  const reg = A().mensal[pad(m + 1)] || {};
+  const custo = reg.custo || 0;
+  const valorHomen = A().valores.homen || 0;
+  const restante = Math.max(0, custo - ids.size * valorHomen);
+  const demais = db.membros.filter(x => !ids.has(x.id)).length;
+  const porDemais = demais ? restante / demais : 0;
+  const quem = db.membros.map(x => ({
+    ...x,
+    homen: ids.has(x.id),
+    valor: ids.has(x.id) ? valorHomen : porDemais,
+    pago: !!(reg.pagos || {})[x.id]
+  })).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  return { p, n: ids.size, reg, custo, valorHomen, restante, demais, porDemais, quem };
+}
+function setMensal(m, campos){
+  const k = pad(m + 1);
+  A().mensal[k] = { ...(A().mensal[k] || {}), ...campos };
+  save();
+}
+function alternarRealizada(m){
+  const atual = (A().mensal[pad(m + 1)] || {}).realizada;
+  setMensal(m, { realizada: !atual });
+  toast(!atual ? 'Confra marcada como realizada' : 'Marcação removida');
+  render();
+}
+function alternarPagou(m, id){
+  const k = pad(m + 1); const reg = A().mensal[k] || {};
+  const pagos = { ...(reg.pagos || {}) };
+  if (pagos[id]) delete pagos[id]; else pagos[id] = hoje();
+  setMensal(m, { pagos });
+  render();
+}
+function textoMes(){
+  const i = infoMes(mesSel); const L = [];
+  L.push('*Confraternização de ' + MESES[mesSel] + ' ' + db.ano + ' — ' + db.equipe + '*');
+  L.push('');
+  L.push('*Aniversariantes (' + i.p.aniv.length + ')*');
+  if (!i.p.aniv.length) L.push('Nenhum');
+  i.p.aniv.forEach(x => L.push('- ' + x.nome + ' (' + fmtDM(x.aniv) + ')'));
+  L.push('');
+  L.push('*Em férias (' + i.p.ferias.length + ')*');
+  if (!i.p.ferias.length) L.push('Ninguém');
+  i.p.ferias.forEach(x => L.push('- ' + x.nome + ' (' + fmtDM(x.feriasIni) + (x.feriasFim ? ' a ' + fmtDM(x.feriasFim) : '') + ')'));
+  if (i.custo) {
+    L.push('');
+    L.push('*Custo:* ' + brl(i.custo));
+    L.push('*Regra:* cada homenageado paga ' + brl(i.valorHomen) + '; o restante de ' + brl(i.restante) + ' é dividido entre ' + i.demais + ' integrante(s).');
+    L.push('*Quem paga:*');
+    i.quem.forEach(x => { if (x.valor > 0) L.push('- ' + x.nome + ': ' + brl(x.valor) + (x.homen ? ' (homenageado)' : '') + (x.pago ? ' ✓' : '')); });
+  }
+  if (db.pix) L.push('Pix: ' + db.pix);
+  return L.join('\n');
+}
+async function copiarMes(){
+  const t = textoMes();
+  try { await navigator.clipboard.writeText(t); }
+  catch(e) { const ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
+  toast('Lista do mês copiada');
+}
+function renderMes(){
+  const y = db.ano;
+  const grade = MESES.map((nome, m) => {
+    const i = infoMes(m);
+    return `<button class="mes-btn ${m === mesSel ? 'on' : ''}" data-act="mesSel" data-m="${m}">
+      <b>${nome.slice(0, 3)}</b><small>${i.n} homenageado(s)</small>${i.reg.realizada ? '<span class="ok">✓</span>' : ''}</button>`;
+  }).join('');
+  const i = infoMes(mesSel);
+  const lista = (titulo, arr, icone) => arr.length
+    ? `<span class="rotulo">${titulo}</span>` + arr.map(x => `<div class="item"><span>${icone} ${esc(x.nome)}</span></div>`).join('')
+    : '';
+  $('#mes').innerHTML = `
+    <div class="card"><h2>Confraternizações de ${y}</h2>
+      <div class="mes-grid">${grade}</div>
+    </div>
+    <div class="card"><h2>${MESES[mesSel]} — homenageados</h2>
+      ${i.n ? '' : '<div class="vazio">Ninguém faz aniversário nem está de férias neste mês.</div>'}
+      ${lista('Aniversariantes', i.p.aniv, '🎂')}
+      ${lista('Em férias', i.p.ferias, '✈️')}
+      <div class="form" style="margin-top:12px">
+        <div><span class="rotulo">Custo da confra (R$)</span><input data-mcusto="${pad(mesSel + 1)}" inputmode="decimal" value="${i.custo || ''}"></div>
+        <div><span class="rotulo">Restante a dividir</span><input value="${brl(i.restante)}" disabled></div>
+      </div>
+      <p class="legenda" style="margin:10px 0 6px">Cada homenageado paga ${brl(i.valorHomen)}. O restante de ${brl(i.restante)} é dividido entre ${i.demais} integrante(s): ${brl(i.porDemais)} cada.</p>
+      <span class="rotulo">Quem paga</span>
+      ${i.quem.length ? i.quem.map(x => `
+        <div class="item">
+          <div><b>${esc(x.nome)}</b><small>${x.homen ? 'Homenageado' : 'Divide o restante'} · ${brl(x.valor)}</small></div>
+          <button class="${x.pago ? 'cel pago' : 'sec'}" data-act="mesPagou" data-m="${mesSel}" data-id="${x.id}">${x.pago ? '✓ Pago' : 'Pendente'}</button>
+        </div>`).join('') : '<div class="vazio">Cadastre integrantes na aba Membros.</div>'}
+      <div class="acoes">
+        <button class="sec" data-act="mesRealizada" data-m="${mesSel}">${i.reg.realizada ? '✓ Confra realizada' : 'Marcar como realizada'}</button>
+        <button data-act="copiarMes">Copiar lista (WhatsApp)</button>
+      </div>
+    </div>`;
+}
+
 /* ---------- render ---------- */
 function renderAnos(){
   $('#ano').innerHTML = Object.keys(db.anos).sort().map(y => `<option value="${y}" ${y === db.ano ? 'selected' : ''}>${y}</option>`).join('');
@@ -578,16 +737,18 @@ function renderCfg(){
   document.querySelector('[data-cfg=pix]').value = db.pix || '';
   document.querySelector('[data-cfg=ferias]').value = a.valores.ferias ?? '';
   document.querySelector('[data-cfg=aniv]').value = a.valores.aniv ?? '';
+  document.querySelector('[data-cfg=homen]').value = a.valores.homen ?? 0;
 }
 
 function render(){
   $('#titulo').textContent = db.equipe || 'Confraternização de Equipe';
   renderAnos();
-  const abas = ['mem','cal','pag','desp','res','cfg'];
+  const abas = ['mem','cal','mes','pag','desp','res','cfg'];
   document.querySelectorAll('[data-aba]').forEach(b => b.classList.toggle('on', b.dataset.aba === db.aba));
   abas.forEach(s => $('#s-' + s).classList.toggle('on', db.aba === s));
   if (db.aba === 'mem') renderMem();
   if (db.aba === 'cal') renderCal();
+  if (db.aba === 'mes') renderMes();
   if (db.aba === 'pag') renderPag();
   if (db.aba === 'desp') renderDesp();
   if (db.aba === 'res') renderRes();
@@ -614,13 +775,24 @@ document.addEventListener('click', e => {
     case 'calMes': calMes(Number(t.dataset.d)); break;
     case 'calDia': calDia(Number(t.dataset.d)); break;
     case 'calHoje': calHoje(); break;
+    case 'mesSel': mesSel = Number(t.dataset.m); render(); break;
+    case 'mesRealizada': alternarRealizada(Number(t.dataset.m)); break;
+    case 'copiarMes': copiarMes(); break;
+    case 'mesPagou': alternarPagou(Number(t.dataset.m), t.dataset.id); break;
   }
 });
 document.addEventListener('change', e => {
   const el = e.target;
   if (el.id === 'ano') { db.ano = el.value; ensureAno(db.ano); save(); render(); }
   else if (el.id === 'importar') { importar(el.files[0]); el.value = ''; }
+  else if (el.dataset && el.dataset.mcusto) {
+    setMensal(Number(el.dataset.mcusto) - 1, { custo: numero(el.value) });
+    render(); toast('Custo salvo');
+  }
   else if (el.dataset && el.dataset.cfg) cfg(el);
+});
+document.addEventListener('input', e => {
+  if (e.target.id === 'mFIni' || e.target.id === 'mDias') atualizaRetorno();
 });
 document.addEventListener('keydown', e => {
   if (e.key === 'Enter' && e.target.id === 'mNome') salvarMem();
