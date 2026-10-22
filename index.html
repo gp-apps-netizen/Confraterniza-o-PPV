@@ -38,6 +38,7 @@
   .item{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--line)}
   .item:last-child{border-bottom:0}
   .item small{color:var(--mut);display:block}
+  .item .clicavel{flex:1;cursor:pointer;min-width:0}
   .val{font-weight:600;white-space:nowrap}
   .stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   .st{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px}
@@ -48,6 +49,18 @@
   .acoes button{flex:1}
   .vazio{color:var(--mut);text-align:center;padding:14px 0}
   .rotulo{font-size:12px;color:var(--mut);margin:10px 0 4px;display:block}
+  .editando{outline:2px solid var(--acc)}
+  .cal-nav{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+  .cal-nav b{flex:1;text-align:center}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+  .dsem{font-size:11px;color:var(--mut);text-align:center;padding:2px 0}
+  .dia{background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:4px 2px;min-height:54px;display:flex;flex-direction:column;align-items:center;gap:2px;font-weight:500;font-size:13px;line-height:1.1}
+  .dia i{font-style:normal;font-size:10px;color:var(--mut);font-weight:400}
+  .dia.fer{background:#1d2a3a;border-color:#3a5a80}
+  .dia.hoje{outline:1px solid var(--acc)}
+  .dia.sel{background:var(--acc);color:#111;border-color:var(--acc)}
+  .dia.sel i{color:#111}
+  .legenda{color:var(--mut);font-size:12px;margin:10px 0 0}
   #toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--acc);color:#111;padding:10px 16px;border-radius:10px;font-weight:600;opacity:0;transition:opacity .25s;pointer-events:none}
   #toast.on{opacity:1}
   @media print{
@@ -69,6 +82,8 @@
     <button class="sec" data-act="novoAno" style="width:auto">+ ano</button>
   </div>
   <nav>
+    <button data-aba="mem">Membros</button>
+    <button data-aba="cal">Calendário</button>
     <button data-aba="pag">Pagamentos</button>
     <button data-aba="desp">Despesas</button>
     <button data-aba="res">Resumo</button>
@@ -77,6 +92,34 @@
 </header>
 
 <main>
+  <!-- MEMBROS -->
+  <section id="s-mem">
+    <div class="card" id="card-form">
+      <h2 id="tituloForm">Novo integrante</h2>
+      <div class="form">
+        <input id="mNome" class="full" placeholder="Nome do integrante" maxlength="60">
+        <div class="full"><span class="rotulo">Data de aniversário</span><input id="mAniv" type="date"></div>
+        <div><span class="rotulo">Férias — início</span><input id="mFIni" type="date"></div>
+        <div><span class="rotulo">Férias — fim</span><input id="mFFim" type="date"></div>
+        <button class="full" data-act="salvarMem" id="btnSalvarMem">Adicionar integrante</button>
+        <button class="sec full" data-act="cancelarMem" id="btnCancelarMem" style="display:none">Cancelar edição</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Cadastro</h2>
+      <div id="lista-cad"></div>
+    </div>
+    <div class="card">
+      <h2>Próximos 60 dias</h2>
+      <div id="lista-prox"></div>
+    </div>
+  </section>
+
+  <!-- CALENDÁRIO -->
+  <section id="s-cal">
+    <div id="cal"></div>
+  </section>
+
   <!-- PAGAMENTOS -->
   <section id="s-pag">
     <div class="card">
@@ -84,11 +127,7 @@
       <div class="grade cab">
         <div>Integrante</div><div>Férias</div><div>Aniversário</div><div></div>
       </div>
-      <div id="lista-membros" class="grade" style="margin-top:6px"></div>
-      <div class="form">
-        <input id="novoMembro" class="full" placeholder="Nome do integrante" maxlength="60">
-        <button class="full" data-act="addMembro">Adicionar integrante</button>
-      </div>
+      <div id="lista-membros" style="margin-top:6px"></div>
     </div>
   </section>
 
@@ -164,6 +203,7 @@ const brl = v => Number(v || 0).toLocaleString('pt-BR', {style:'currency', curre
 const pad = n => String(n).padStart(2, '0');
 const hoje = () => { const d = new Date(); return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()); };
 const fmtData = iso => iso ? iso.split('-').reverse().join('/') : '';
+const fmtDM = iso => iso ? iso.slice(5).split('-').reverse().join('/') : '';
 const nomeCota = id => (COTAS.find(c => c.id === id) || {nome:'Geral'}).nome;
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const numero = s => parseFloat(String(s).replace(/\./g, '').replace(',', '.')) || 0;
@@ -171,7 +211,8 @@ const numero = s => parseFloat(String(s).replace(/\./g, '').replace(',', '.')) |
 function load(){ try { return JSON.parse(localStorage.getItem(KEY)); } catch(e) { return null; } }
 function save(){ localStorage.setItem(KEY, JSON.stringify(db)); }
 
-let db = load() || { equipe:'Minha Equipe', pix:'', membros:[], anos:{}, ano:String(new Date().getFullYear()), aba:'pag' };
+let db = load() || { equipe:'Minha Equipe', pix:'', membros:[], anos:{}, ano:String(new Date().getFullYear()), aba:'mem' };
+let editId = null;
 
 function ensureAno(a){
   if (!db.anos[a]) {
@@ -203,6 +244,27 @@ function calc(){
   return r;
 }
 
+/* próximas datas (aniversários e início de férias), ignorando o ano */
+function proximos(dias = 60){
+  const hj = new Date(); hj.setHours(0,0,0,0);
+  const prox = iso => {
+    const [, mm, dd] = iso.split('-').map(Number);
+    let d = new Date(hj.getFullYear(), mm - 1, dd);
+    if (d < hj) d = new Date(hj.getFullYear() + 1, mm - 1, dd);
+    return Math.round((d - hj) / 864e5);
+  };
+  const itens = [];
+  db.membros.forEach(m => {
+    if (m.aniv) { const n = prox(m.aniv); if (n <= dias) itens.push({n, nome:m.nome, txt:'🎂 Aniversário', data:fmtDM(m.aniv)}); }
+    if (m.feriasIni) {
+      const n = prox(m.feriasIni);
+      if (n <= dias) itens.push({n, nome:m.nome, txt:'✈️ Férias começam', data:fmtDM(m.feriasIni) + (m.feriasFim ? ' a ' + fmtDM(m.feriasFim) : '')});
+    }
+  });
+  return itens.sort((x, y) => x.n - y.n);
+}
+const emDias = n => n === 0 ? 'Hoje' : n === 1 ? 'Amanhã' : 'Em ' + n + ' dias';
+
 /* ---------- ano ---------- */
 function novoAno(){
   const ano = prompt('Qual ano? (ex.: ' + (Number(db.ano) + 1) + ')', String(Number(db.ano) + 1));
@@ -210,18 +272,48 @@ function novoAno(){
   db.ano = ano.trim(); ensureAno(db.ano); save(); render();
 }
 
-/* ---------- membros ---------- */
-function addMembro(){
-  const inp = $('#novoMembro'); const nome = inp.value.trim();
+/* ---------- membros (cadastro) ---------- */
+function limparForm(){
+  editId = null;
+  ['#mNome','#mAniv','#mFIni','#mFFim'].forEach(s => $(s).value = '');
+  render();
+}
+function editarMem(id){
+  const m = db.membros.find(x => x.id === id); if (!m) return;
+  editId = id;
+  $('#mNome').value = m.nome || '';
+  $('#mAniv').value = m.aniv || '';
+  $('#mFIni').value = m.feriasIni || '';
+  $('#mFFim').value = m.feriasFim || '';
+  render();
+  $('#mNome').focus();
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+function salvarMem(){
+  const nome = $('#mNome').value.trim();
+  const aniv = $('#mAniv').value;
+  const feriasIni = $('#mFIni').value;
+  const feriasFim = $('#mFFim').value;
   if (!nome) return toast('Digite o nome');
-  if (db.membros.some(m => m.nome.toLowerCase() === nome.toLowerCase())) return toast('Já existe');
-  db.membros.push({ id: uid(), nome }); save(); render(); $('#novoMembro').focus();
+  if (feriasIni && feriasFim && feriasFim < feriasIni) return toast('Fim das férias é antes do início');
+  if (db.membros.some(m => m.id !== editId && m.nome.toLowerCase() === nome.toLowerCase())) return toast('Já existe alguém com esse nome');
+  const dados = { nome, aniv, feriasIni, feriasFim };
+  if (editId) {
+    Object.assign(db.membros.find(m => m.id === editId), dados);
+    toast('Cadastro atualizado');
+  } else {
+    db.membros.push({ id: uid(), ...dados }); toast('Integrante adicionado');
+  }
+  editId = null;
+  ['#mNome','#mAniv','#mFIni','#mFFim'].forEach(s => $(s).value = '');
+  save(); render();
 }
 function rmMembro(id){
   const m = db.membros.find(x => x.id === id); if (!m) return;
   if (!confirm('Remover ' + m.nome + ' da lista?')) return;
   db.membros = db.membros.filter(x => x.id !== id);
   Object.keys(A().pagos).forEach(k => { if (k.startsWith(id + '|')) delete A().pagos[k]; });
+  if (editId === id) editId = null;
   save(); render();
 }
 function pagar(mid, cota){
@@ -276,7 +368,7 @@ function importar(file){
       if (!Array.isArray(obj.membros) || typeof obj.anos !== 'object') throw new Error();
       if (!confirm('Substituir os dados atuais pelo backup?')) return;
       db = obj; if (!db.anos[db.ano]) db.ano = Object.keys(db.anos).sort().pop() || String(new Date().getFullYear());
-      ensureAno(db.ano); save(); render(); toast('Backup importado');
+      ensureAno(db.ano); editId = null; save(); render(); toast('Backup importado');
     } catch(e) { alert('Arquivo de backup inválido.'); }
   };
   r.readAsText(file);
@@ -309,15 +401,126 @@ async function copiar(){
   toast('Relatório copiado');
 }
 
+/* ---------- calendário ---------- */
+const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const DIAS_SEM = ['D','S','T','Q','Q','S','S'];
+let calY = new Date().getFullYear(), calM = new Date().getMonth(), calSel = null;
+
+/* compara só mês e dia (MM-DD), então vale todo ano */
+function eventosDoDia(y, m, d){
+  const k = pad(m + 1) + '-' + pad(d);
+  const r = { aniv: [], ferias: [], inicio: [] };
+  db.membros.forEach(x => {
+    if (x.aniv && x.aniv.slice(5) === k) r.aniv.push(x);
+    if (x.feriasIni) {
+      const a = x.feriasIni.slice(5), b = (x.feriasFim || x.feriasIni).slice(5);
+      const dentro = a <= b ? (k >= a && k <= b) : (k >= a || k <= b);
+      if (dentro) r.ferias.push(x);
+      if (k === a) r.inicio.push(x);
+    }
+  });
+  return r;
+}
+function eventosDoMes(y, m){
+  const lista = [];
+  for (let d = 1; d <= new Date(y, m + 1, 0).getDate(); d++) {
+    const ev = eventosDoDia(y, m, d);
+    ev.aniv.forEach(x => lista.push({d, tipo:'🎂', nome:x.nome, txt:'Aniversário'}));
+    ev.inicio.forEach(x => lista.push({d, tipo:'✈️', nome:x.nome, txt:'Início das férias' + (x.feriasFim ? ' · até ' + fmtDM(x.feriasFim) : '')}));
+  }
+  return lista;
+}
+function renderCal(){
+  const hj = new Date();
+  const primeiro = new Date(calY, calM, 1).getDay();
+  const total = new Date(calY, calM + 1, 0).getDate();
+  let grid = DIAS_SEM.map(d => `<div class="dsem">${d}</div>`).join('');
+  for (let i = 0; i < primeiro; i++) grid += '<div></div>';
+  for (let d = 1; d <= total; d++) {
+    const ev = eventosDoDia(calY, calM, d);
+    const cls = ['dia'];
+    if (ev.ferias.length) cls.push('fer');
+    if (hj.getFullYear() === calY && hj.getMonth() === calM && hj.getDate() === d) cls.push('hoje');
+    if (calSel === d) cls.push('sel');
+    grid += `<button class="${cls.join(' ')}" data-act="calDia" data-d="${d}">
+      <span>${d}</span>
+      ${ev.aniv.length ? `<i>🎂 ${ev.aniv.length}</i>` : ''}
+      ${ev.ferias.length ? `<i>✈️ ${ev.ferias.length}</i>` : ''}</button>`;
+  }
+  let detalhe = '';
+  if (calSel) {
+    const ev = eventosDoDia(calY, calM, calSel);
+    const linhas = [
+      ...ev.aniv.map(x => `🎂 ${esc(x.nome)} — aniversário`),
+      ...ev.ferias.map(x => `✈️ ${esc(x.nome)} — de férias`)
+    ];
+    detalhe = `<div class="card" style="margin-top:12px"><h2>${calSel} de ${MESES[calM]}</h2>${
+      linhas.length ? linhas.map(l => `<div class="item"><span>${l}</span></div>`).join('') : '<div class="vazio">Ninguém neste dia.</div>'
+    }</div>`;
+  }
+  const lista = eventosDoMes(calY, calM);
+  const listaHtml = lista.length ? lista.map(e => `
+    <div class="item"><div><b>${pad(e.d)}/${pad(calM + 1)} · ${esc(e.nome)}</b><small>${e.txt}</small></div><span class="val">${e.tipo}</span></div>`
+  ).join('') : '<div class="vazio">Nenhum aniversário ou início de férias neste mês.</div>';
+
+  $('#cal').innerHTML = `
+    <div class="card">
+      <div class="cal-nav">
+        <button class="sec" data-act="calMes" data-d="-1">‹</button>
+        <b>${MESES[calM]} ${calY}</b>
+        <button class="sec" data-act="calMes" data-d="1">›</button>
+      </div>
+      <div class="cal-grid">${grid}</div>
+      <p class="legenda">🎂 aniversariantes · ✈️ em férias (dias destacados). Toque num dia para ver quem é.</p>
+      <div class="acoes" style="margin-top:8px"><button class="sec" data-act="calHoje">Hoje</button></div>
+    </div>
+    ${detalhe}
+    <div class="card"><h2>Neste mês</h2>${listaHtml}</div>`;
+}
+function calMes(delta){
+  calM += delta;
+  if (calM < 0) { calM = 11; calY--; }
+  if (calM > 11) { calM = 0; calY++; }
+  calSel = null; render();
+}
+function calDia(d){ calSel = calSel === d ? null : d; render(); }
+function calHoje(){ const h = new Date(); calY = h.getFullYear(); calM = h.getMonth(); calSel = h.getDate(); render(); }
+
 /* ---------- render ---------- */
 function renderAnos(){
   $('#ano').innerHTML = Object.keys(db.anos).sort().map(y => `<option value="${y}" ${y === db.ano ? 'selected' : ''}>${y}</option>`).join('');
 }
 
+function renderMem(){
+  $('#tituloForm').textContent = editId ? 'Editar integrante' : 'Novo integrante';
+  $('#btnSalvarMem').textContent = editId ? 'Salvar alterações' : 'Adicionar integrante';
+  $('#btnCancelarMem').style.display = editId ? '' : 'none';
+  $('#card-form').classList.toggle('editando', !!editId);
+
+  const ord = [...db.membros].sort((x, y) => x.nome.localeCompare(y.nome, 'pt-BR'));
+  $('#lista-cad').innerHTML = ord.length ? ord.map(m => `
+    <div class="item ${m.id === editId ? 'editando' : ''}" style="padding:9px 6px">
+      <div class="clicavel" data-act="editarMem" data-m="${m.id}">
+        <b>${esc(m.nome)}</b>
+        <small>🎂 ${m.aniv ? fmtDM(m.aniv) : 'sem data'} · ✈️ ${m.feriasIni ? fmtData(m.feriasIni) + (m.feriasFim ? ' a ' + fmtData(m.feriasFim) : '') : 'sem data'}</small>
+      </div>
+      <button class="perigo" data-act="rmMembro" data-m="${m.id}" aria-label="Remover">✕</button>
+    </div>`).join('') : '<div class="vazio">Nenhum integrante cadastrado ainda.</div>';
+
+  const prox = proximos(60);
+  $('#lista-prox').innerHTML = prox.length ? prox.map(p => `
+    <div class="item"><div><b>${esc(p.nome)}</b><small>${p.txt} · ${p.data}</small></div><span class="val">${emDias(p.n)}</span></div>`
+  ).join('') : '<div class="vazio">Nenhum aniversário ou férias nos próximos 60 dias.</div>';
+}
+
 function renderPag(){
   const a = A();
   const box = $('#lista-membros');
-  if (!db.membros.length) { box.outerHTML = '<div id="lista-membros" class="vazio">Adicione os integrantes da equipe abaixo.</div>'; return; }
+  if (!db.membros.length) {
+    box.className = '';
+    box.innerHTML = '<div class="vazio">Nenhum integrante cadastrado. Use a aba Membros.</div>';
+    return;
+  }
   box.className = 'grade';
   box.innerHTML = db.membros.map(m => `
     <div class="nome" title="${esc(m.nome)}">${esc(m.nome)}</div>
@@ -380,8 +583,11 @@ function renderCfg(){
 function render(){
   $('#titulo').textContent = db.equipe || 'Confraternização de Equipe';
   renderAnos();
+  const abas = ['mem','cal','pag','desp','res','cfg'];
   document.querySelectorAll('[data-aba]').forEach(b => b.classList.toggle('on', b.dataset.aba === db.aba));
-  ['pag','desp','res','cfg'].forEach(s => $('#s-' + s).classList.toggle('on', db.aba === s));
+  abas.forEach(s => $('#s-' + s).classList.toggle('on', db.aba === s));
+  if (db.aba === 'mem') renderMem();
+  if (db.aba === 'cal') renderCal();
   if (db.aba === 'pag') renderPag();
   if (db.aba === 'desp') renderDesp();
   if (db.aba === 'res') renderRes();
@@ -395,7 +601,9 @@ document.addEventListener('click', e => {
   if (t.dataset.aba) { db.aba = t.dataset.aba; save(); render(); return; }
   switch (t.dataset.act) {
     case 'novoAno': novoAno(); break;
-    case 'addMembro': addMembro(); break;
+    case 'salvarMem': salvarMem(); break;
+    case 'cancelarMem': limparForm(); break;
+    case 'editarMem': editarMem(t.dataset.m); break;
     case 'rmMembro': rmMembro(t.dataset.m); break;
     case 'pagar': pagar(t.dataset.m, t.dataset.c); break;
     case 'addDesp': addDesp(); break;
@@ -403,6 +611,9 @@ document.addEventListener('click', e => {
     case 'copiar': copiar(); break;
     case 'imprimir': window.print(); break;
     case 'exportar': exportar(); break;
+    case 'calMes': calMes(Number(t.dataset.d)); break;
+    case 'calDia': calDia(Number(t.dataset.d)); break;
+    case 'calHoje': calHoje(); break;
   }
 });
 document.addEventListener('change', e => {
@@ -412,7 +623,7 @@ document.addEventListener('change', e => {
   else if (el.dataset && el.dataset.cfg) cfg(el);
 });
 document.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && e.target.id === 'novoMembro') addMembro();
+  if (e.key === 'Enter' && e.target.id === 'mNome') salvarMem();
 });
 
 render();
